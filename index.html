@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stock Dashboard</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stock Dashboard with Trend Prediction</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
@@ -29,7 +29,7 @@
       margin-right: 1em;
       font-size: 1em;
     }
-    #result {
+    #result, #trend {
       margin-top: 1.5em;
       background: #333;
       padding: 1em;
@@ -44,41 +44,66 @@
 </head>
 <body>
   <header>
-    <h1>📈 Stock Dashboard</h1>
+    <h1>📈 Stock Dashboard with Trend Prediction</h1>
   </header>
   <div class="container">
-    <input type="text" id="symbolInput" placeholder="Enter Stock Symbol (e.g., AAPL)">
+    <input type="text" id="symbolInput" placeholder="Enter Stock Symbol (e.g., AAPL)" />
     <button onclick="fetchData()">Search</button>
     <div id="result"></div>
+    <div id="trend"></div>
     <canvas id="priceChart" width="800" height="400"></canvas>
   </div>
 
   <script>
     async function fetchData() {
       const symbol = document.getElementById('symbolInput').value.toUpperCase();
-      const apiKey = 'demo'; // replace with your own API key
+      const apiKey = 'demo'; // 建議換成你自己的 Alpha Vantage API key
       const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}`;
 
-      const res = await fetch(url);
-      const data = await res.json();
-      const timeSeries = data['Time Series (Daily)'];
+      document.getElementById('result').textContent = 'Loading data...';
+      document.getElementById('trend').textContent = '';
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const timeSeries = data['Time Series (Daily)'];
 
-      if (!timeSeries) {
-        document.getElementById('result').innerText = 'No data found or API limit reached.';
-        return;
+        if (!timeSeries) {
+          document.getElementById('result').textContent = 'No data found or API limit reached.';
+          document.getElementById('trend').textContent = '';
+          return;
+        }
+
+        const dates = Object.keys(timeSeries).slice(0, 30).reverse();
+        const prices = dates.map(date => parseFloat(timeSeries[date]['4. close']));
+
+        document.getElementById('result').innerHTML = `<strong>${symbol}</strong> latest close price: $${prices[prices.length-1].toFixed(2)}`;
+
+        // Calculate 5-day SMA
+        const sma = prices.map((_, i, arr) => {
+          if (i < 4) return null;
+          const slice = arr.slice(i - 4, i + 1);
+          return slice.reduce((a, b) => a + b) / slice.length;
+        });
+
+        drawChart(dates, prices, sma);
+
+        // Trend prediction based on last price and last SMA
+        const lastPrice = prices[prices.length - 1];
+        const lastSMA = sma[sma.length - 1];
+
+        if (lastSMA === null) {
+          document.getElementById('trend').textContent = 'Not enough data to predict trend.';
+        } else if (lastPrice > lastSMA) {
+          document.getElementById('trend').textContent = 'Trend: 📈 Upward - Possible rise';
+        } else if (lastPrice < lastSMA) {
+          document.getElementById('trend').textContent = 'Trend: 📉 Downward - Possible fall';
+        } else {
+          document.getElementById('trend').textContent = 'Trend: Neutral';
+        }
+      } catch (error) {
+        document.getElementById('result').textContent = 'Error fetching data.';
+        document.getElementById('trend').textContent = '';
       }
-
-      const dates = Object.keys(timeSeries).slice(0, 30).reverse();
-      const prices = dates.map(date => parseFloat(timeSeries[date]['4. close']));
-
-      // Simple Moving Average (SMA)
-      const sma = prices.map((_, i, arr) => {
-        if (i < 4) return null;
-        const slice = arr.slice(i - 4, i + 1);
-        return slice.reduce((a, b) => a + b) / slice.length;
-      });
-
-      drawChart(dates, prices, sma);
     }
 
     let chart;
@@ -97,32 +122,4 @@
               tension: 0.3
             },
             {
-              label: 'SMA (5-day)',
-              data: sma,
-              borderColor: 'orange',
-              tension: 0.3
-            }
-          ]
-        },
-        options: {
-          plugins: {
-            legend: {
-              labels: {
-                color: '#fff'
-              }
-            }
-          },
-          scales: {
-            x: {
-              ticks: { color: '#ccc' }
-            },
-            y: {
-              ticks: { color: '#ccc' }
-            }
-          }
-        }
-      });
-    }
-  </script>
-</body>
-</html>
+              label: 'SMA (
