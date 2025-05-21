@@ -1,11 +1,61 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8">
-    <title>我的網站</title>
-  </head>
-  <body>
-    <h1>Hello GitHub Pages!</h1>
-    <p>這是我用 GitHub Pages 架設的免費網站！</p>
-  </body>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>股票查詢網站</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 2em;
+      background: #f0f2f5;
+    }
+    input, button {
+      padding: 0.5em;
+      margin: 0.5em;
+      font-size: 1em;
+    }
+    #result {
+      margin-top: 1em;
+      font-size: 1.2em;
+    }
+  </style>
+</head>
+<body>
+  <h1>股票查詢與分析</h1>
+  <p>輸入股票代碼（例如：AAPL, TSLA）</p>
+  <input type="text" id="symbolInput" placeholder="輸入股票代碼">
+  <button onclick="getStock()">查詢</button>
+
+  <div id="result"></div>
+
+  <script>
+    async function getStock() {
+      const symbol = document.getElementById('symbolInput').value.toUpperCase();
+      const apiKey = 'demo'; // 使用 Alpha Vantage 提供的 demo 金鑰，正式使用請申請自己的
+      const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`;
+
+      document.getElementById('result').innerHTML = '查詢中...';
+
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        const quote = data['Global Quote'];
+
+        if (quote && quote['05. price']) {
+          document.getElementById('result').innerHTML = `
+            <strong>${symbol}</strong><br>
+            現價：$${quote['05. price']}<br>
+            漲跌：${quote['10. change percent']}
+          `;
+        } else {
+          document.getElementById('result').innerHTML = '找不到股票資訊';
+        }
+      } catch (error) {
+        document.getElementById('result').innerHTML = '查詢錯誤';
+      }
+    }
+  </script>
+</body>
 </html>
+
