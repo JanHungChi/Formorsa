@@ -1,125 +1,233 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Stock Dashboard with Trend Prediction</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>台股查詢與技術分析</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f4f6f8;
       margin: 0;
-      padding: 0;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: #1e1e2f;
-      color: #fff;
-    }
-    header {
-      padding: 1em;
-      text-align: center;
-      background: #2e2e3e;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+      padding: 2rem;
+      color: #333;
     }
     .container {
-      padding: 2em;
       max-width: 900px;
-      margin: auto;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      padding: 2rem;
+      box-shadow: 0 0 12px rgba(0, 0, 0, 0.05);
     }
-    input, button {
-      padding: 0.5em;
-      margin-right: 1em;
-      font-size: 1em;
+    h1 {
+      text-align: center;
+      margin-bottom: 1rem;
     }
-    #result, #trend {
-      margin-top: 1.5em;
-      background: #333;
-      padding: 1em;
-      border-radius: 8px;
+    input {
+      padding: 0.5rem;
+      font-size: 1rem;
+      width: 70%;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+      margin-left: 0.5rem;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    #result {
+      margin-top: 1.5rem;
+      font-size: 1.1rem;
     }
     canvas {
-      margin-top: 2em;
-      background: #fff;
-      border-radius: 10px;
+      margin-top: 2rem;
+      width: 100% !important;
+      height: 400px !important;
     }
   </style>
 </head>
 <body>
-  <header>
-    <h1>📈 Stock Dashboard with Trend Prediction</h1>
-  </header>
   <div class="container">
-    <input type="text" id="symbolInput" placeholder="Enter Stock Symbol (e.g., AAPL)" />
-    <button onclick="fetchData()">Search</button>
+    <h1>台股查詢與技術分析</h1>
+    <div style="text-align:center">
+      <input type="text" id="stockId" placeholder="輸入股票代碼，例如 2330">
+      <button onclick="getStock()">查詢</button>
+    </div>
     <div id="result"></div>
-    <div id="trend"></div>
-    <canvas id="priceChart" width="800" height="400"></canvas>
+    <canvas id="priceChart"></canvas>
+    <canvas id="rsiChart"></canvas>
+    <canvas id="klineChart"></canvas>
   </div>
 
   <script>
-    async function fetchData() {
-      const symbol = document.getElementById('symbolInput').value.toUpperCase();
-      const apiKey = 'demo'; // 建議換成你自己的 Alpha Vantage API key
-      const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}`;
-
-      document.getElementById('result').textContent = 'Loading data...';
-      document.getElementById('trend').textContent = '';
+    async function getStock() {
+      const stockId = document.getElementById("stockId").value.trim();
+      const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_${stockId}.tw`;
       try {
-        const res = await fetch(url);
-        const data = await res.json();
-        const timeSeries = data['Time Series (Daily)'];
+        const response = await fetch(url);
+        const data = await response.json();
+        const info = data.msgArray[0];
 
-        if (!timeSeries) {
-          document.getElementById('result').textContent = 'No data found or API limit reached.';
-          document.getElementById('trend').textContent = '';
-          return;
-        }
+        document.getElementById("result").innerText =
+          `【${info.n}】現價：${info.z} 元，漲跌：${info.ch} (${info.y})`;
 
-        const dates = Object.keys(timeSeries).slice(0, 30).reverse();
-        const prices = dates.map(date => parseFloat(timeSeries[date]['4. close']));
+        const prices = [parseFloat(info.o), parseFloat(info.h), parseFloat(info.l), parseFloat(info.z)];
+        drawPriceChart(["開盤", "最高", "最低", "收盤"], prices);
 
-        document.getElementById('result').innerHTML = `<strong>${symbol}</strong> latest close price: $${prices[prices.length-1].toFixed(2)}`;
+        const fakeClose = generateFakeClose(parseFloat(info.z));
+        const rsiValues = calculateRSI(fakeClose, 14);
+        drawRSIChart(rsiValues);
 
-        // Calculate 5-day SMA
-        const sma = prices.map((_, i, arr) => {
-          if (i < 4) return null;
-          const slice = arr.slice(i - 4, i + 1);
-          return slice.reduce((a, b) => a + b) / slice.length;
-        });
+        const klineData = generateFakeKLine(parseFloat(info.z));
+        drawKLineChart(klineData);
 
-        drawChart(dates, prices, sma);
-
-        // Trend prediction based on last price and last SMA
-        const lastPrice = prices[prices.length - 1];
-        const lastSMA = sma[sma.length - 1];
-
-        if (lastSMA === null) {
-          document.getElementById('trend').textContent = 'Not enough data to predict trend.';
-        } else if (lastPrice > lastSMA) {
-          document.getElementById('trend').textContent = 'Trend: 📈 Upward - Possible rise';
-        } else if (lastPrice < lastSMA) {
-          document.getElementById('trend').textContent = 'Trend: 📉 Downward - Possible fall';
-        } else {
-          document.getElementById('trend').textContent = 'Trend: Neutral';
-        }
-      } catch (error) {
-        document.getElementById('result').textContent = 'Error fetching data.';
-        document.getElementById('trend').textContent = '';
+      } catch (e) {
+        document.getElementById("result").innerText = "查詢失敗，請確認股票代碼是否正確。";
       }
     }
 
-    let chart;
-    function drawChart(labels, data, sma) {
+    function generateFakeClose(latestPrice) {
+      let prices = [];
+      for (let i = 0; i < 20; i++) {
+        const noise = (Math.random() - 0.5) * 2;
+        const price = latestPrice + noise;
+        prices.unshift(price);
+      }
+      return prices;
+    }
+
+    function generateFakeKLine(basePrice) {
+      const data = [];
+      for (let i = 0; i < 20; i++) {
+        const open = basePrice + (Math.random() - 0.5) * 2;
+        const close = open + (Math.random() - 0.5) * 2;
+        const high = Math.max(open, close) + Math.random() * 1;
+        const low = Math.min(open, close) - Math.random() * 1;
+        data.push({ o: open, h: high, l: low, c: close });
+      }
+      return data;
+    }
+
+    function calculateRSI(closes, period = 14) {
+      let gains = 0, losses = 0;
+      for (let i = 1; i <= period; i++) {
+        const diff = closes[i] - closes[i - 1];
+        if (diff >= 0) gains += diff;
+        else losses -= diff;
+      }
+      let avgGain = gains / period;
+      let avgLoss = losses / period;
+      let rsi = [50];
+      for (let i = period + 1; i < closes.length; i++) {
+        const diff = closes[i] - closes[i - 1];
+        const gain = diff > 0 ? diff : 0;
+        const loss = diff < 0 ? -diff : 0;
+        avgGain = (avgGain * (period - 1) + gain) / period;
+        avgLoss = (avgLoss * (period - 1) + loss) / period;
+        const rs = avgGain / (avgLoss || 1);
+        rsi.push(100 - (100 / (1 + rs)));
+      }
+      return rsi;
+    }
+
+    let priceChart, rsiChart, klineChart;
+    function drawPriceChart(labels, values) {
       const ctx = document.getElementById('priceChart').getContext('2d');
-      if (chart) chart.destroy();
-      chart = new Chart(ctx, {
+      if (priceChart) priceChart.destroy();
+      priceChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '價格 (元)',
+            data: values,
+            backgroundColor: ['#007bff', '#28a745', '#ffc107', '#dc3545'],
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: '即時股價資訊（簡易圖示）'
+            }
+          }
+        }
+      });
+    }
+
+    function drawRSIChart(rsiValues) {
+      const ctx = document.getElementById('rsiChart').getContext('2d');
+      if (rsiChart) rsiChart.destroy();
+      rsiChart = new Chart(ctx, {
         type: 'line',
         data: {
-          labels,
-          datasets: [
-            {
-              label: 'Price',
-              data,
-              borderColor: 'skyblue',
-              tension: 0.3
-            },
-            {
-              label: 'SMA (
+          labels: Array.from({ length: rsiValues.length }, (_, i) => i + 1),
+          datasets: [{
+            label: 'RSI 指標',
+            data: rsiValues,
+            borderColor: '#6610f2',
+            fill: false,
+            tension: 0.1
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: { min: 0, max: 100 }
+          },
+          plugins: {
+            title: {
+              display: true,
+              text: 'RSI 技術指標 (模擬數據)'
+            }
+          }
+        }
+      });
+    }
+
+    function drawKLineChart(data) {
+      const ctx = document.getElementById('klineChart').getContext('2d');
+      if (klineChart) klineChart.destroy();
+      const labels = data.map((_, i) => `第 ${i + 1} 根`);
+      const kdata = data.map(d => ({
+        x: labels[data.indexOf(d)],
+        o: d.o,
+        h: d.h,
+        l: d.l,
+        c: d.c
+      }));
+
+      klineChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'K 線 (模擬資料)',
+            data: kdata.map(d => d.c),
+            backgroundColor: kdata.map(d => d.c >= d.o ? '#28a745' : '#dc3545'),
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: '模擬 K 線圖（以收盤價顯示）'
+            }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
