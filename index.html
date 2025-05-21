@@ -1,59 +1,127 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>股票查詢網站</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stock Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
-      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #1e1e2f;
+      color: #fff;
+    }
+    header {
+      padding: 1em;
+      text-align: center;
+      background: #2e2e3e;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    }
+    .container {
       padding: 2em;
-      background: #f0f2f5;
+      max-width: 900px;
+      margin: auto;
     }
     input, button {
       padding: 0.5em;
-      margin: 0.5em;
+      margin-right: 1em;
       font-size: 1em;
     }
     #result {
-      margin-top: 1em;
-      font-size: 1.2em;
+      margin-top: 1.5em;
+      background: #333;
+      padding: 1em;
+      border-radius: 8px;
+    }
+    canvas {
+      margin-top: 2em;
+      background: #fff;
+      border-radius: 10px;
     }
   </style>
 </head>
 <body>
-  <h1>股票查詢與分析</h1>
-  <p>輸入股票代碼（例如：AAPL, TSLA）</p>
-  <input type="text" id="symbolInput" placeholder="輸入股票代碼">
-  <button onclick="getStock()">查詢</button>
-
-  <div id="result"></div>
+  <header>
+    <h1>📈 Stock Dashboard</h1>
+  </header>
+  <div class="container">
+    <input type="text" id="symbolInput" placeholder="Enter Stock Symbol (e.g., AAPL)">
+    <button onclick="fetchData()">Search</button>
+    <div id="result"></div>
+    <canvas id="priceChart" width="800" height="400"></canvas>
+  </div>
 
   <script>
-    async function getStock() {
+    async function fetchData() {
       const symbol = document.getElementById('symbolInput').value.toUpperCase();
-      const apiKey = 'demo'; // 使用 Alpha Vantage 提供的 demo 金鑰，正式使用請申請自己的
-      const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`;
+      const apiKey = 'demo'; // replace with your own API key
+      const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${apiKey}`;
 
-      document.getElementById('result').innerHTML = '查詢中...';
+      const res = await fetch(url);
+      const data = await res.json();
+      const timeSeries = data['Time Series (Daily)'];
 
-      try {
-        const response = await fetch(url);
-        const data = await response.json();
-        const quote = data['Global Quote'];
-
-        if (quote && quote['05. price']) {
-          document.getElementById('result').innerHTML = `
-            <strong>${symbol}</strong><br>
-            現價：$${quote['05. price']}<br>
-            漲跌：${quote['10. change percent']}
-          `;
-        } else {
-          document.getElementById('result').innerHTML = '找不到股票資訊';
-        }
-      } catch (error) {
-        document.getElementById('result').innerHTML = '查詢錯誤';
+      if (!timeSeries) {
+        document.getElementById('result').innerText = 'No data found or API limit reached.';
+        return;
       }
+
+      const dates = Object.keys(timeSeries).slice(0, 30).reverse();
+      const prices = dates.map(date => parseFloat(timeSeries[date]['4. close']));
+
+      // Simple Moving Average (SMA)
+      const sma = prices.map((_, i, arr) => {
+        if (i < 4) return null;
+        const slice = arr.slice(i - 4, i + 1);
+        return slice.reduce((a, b) => a + b) / slice.length;
+      });
+
+      drawChart(dates, prices, sma);
+    }
+
+    let chart;
+    function drawChart(labels, data, sma) {
+      const ctx = document.getElementById('priceChart').getContext('2d');
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Price',
+              data,
+              borderColor: 'skyblue',
+              tension: 0.3
+            },
+            {
+              label: 'SMA (5-day)',
+              data: sma,
+              borderColor: 'orange',
+              tension: 0.3
+            }
+          ]
+        },
+        options: {
+          plugins: {
+            legend: {
+              labels: {
+                color: '#fff'
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#ccc' }
+            },
+            y: {
+              ticks: { color: '#ccc' }
+            }
+          }
+        }
+      });
     }
   </script>
 </body>
